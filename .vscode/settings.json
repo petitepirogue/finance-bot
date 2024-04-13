@@ -2,5 +2,8 @@
     "files.associations": {
         "*.embeddedhtml": "html",
         "*.mq5": "c"
-    }
+    },
+    "conventionalCommits.scopes": [
+        "config"
+    ]
 }
