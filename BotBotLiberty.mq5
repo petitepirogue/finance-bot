@@ -17,20 +17,19 @@ CiIchimoku *Ichimoku;
 //+------------------------------------------------------------------+
 //| Paramètre d'entrée du robot                                      |
 //+------------------------------------------------------------------+
-
-//+------------------------------------------------------------------+
-//|                                                                  |
-//+------------------------------------------------------------------+
-input double profitTarget = 10.0; // permet de declacher le breakevent pour securiser le trade (stoplos)
-input double lostTarget = -30.0;  // objectif PERTE maximal de gain
-input int numberBot = 20230406;   // pour identifier le bot à modifier cela doit etre unique
-input int mmLent = 7;             // Moyenne mobile Rapide
-input int mmRapide = 20;          // Moyenne mobile Lente
-input double lotSize = 1;         // valeur en point 1(EUR) adapter pour GER40, DJ30 & NAS100
-input int sessionTradeMax = 1;    // nombre du bot de trade maximal par session
-input int hourStartTrade = 9;     // heure de debut de trade
-input int hourEndTrade = 22;      // heure de fin de trade
-input int profitTargetLent = 30;  // permet de mettre le sl serre sur MM7
+input double profitTarget = 20.0;     // permet de declacher le breakevent pour securiser le trade (stoplos)
+input double closeToProfit = 0;       // montant maximal à atteindre pour fermer le trade
+input double lostTarget = -40.0;      // objectif PERTE maximal de gain
+input double profitTargetLent = 20.0; // permet de mettre le sl serre à partir du profit sur mmLent
+input int numberBot = 20230406;       // pour identifier le bot à modifier cela doit etre unique
+input int mmLent = 7;                 // Moyenne mobile Rapide
+input int mmRapide = 20;              // Moyenne mobile Lente
+input double lotSize = 3;             // valeur en point 1(EUR) adapter pour GER40, DJ30 & NAS100
+input int sessionTradeMax = 1;        // nombre du bot de trade maximal par session
+input int hourStartTrade = 9;         // heure de debut de trade
+input int hourEndTrade = 22;          // heure de fin de trade
+input int moveStopLostVal = 15;       // ajout de la marge du sl en mouvement
+input int addTradeSl = 10;            // ajout d'une marge sur la sl par default mmRapide
 //+------------------------------------------------------------------+
 //| Création des variables du robots                                 |
 //+------------------------------------------------------------------+
@@ -45,6 +44,8 @@ bool priceAboveCloud = false;
 bool priceLowCloud = false;
 bool furureCloudGreen = false;
 bool furureCloudRed = false;
+// permet de ne plus revenir en arriere du sl mmRapide si profitTargetLent atteint pour rester dans sl by mmLent
+bool isLimitStopLostVal = false;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function lors de la modification du système|
@@ -52,8 +53,6 @@ bool furureCloudRed = false;
 //+------------------------------------------------------------------+
 int OnInit()
 {
-  Ichimoku = new CiIchimoku();
-  Ichimoku.Create(_Symbol, PERIOD_CURRENT, 9, 26, 52);
   responseRevange = new CArrayObj(); // Initialisation de la liste dynamique
                                      // ArraySetAsSeries(SenkouSpanA, true);
   return (INIT_SUCCEEDED);
@@ -70,16 +69,16 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTick()
 {
+  // fermeture du trade par cloture de bougie
+  closeByBougieMM();
   bool isTimeToTradeVal = isTimeToTrade();
   if (isTimeToTradeVal)
   {
-    crossingMM(mmLent, mmRapide);
+    crossingMM();
   }
   moveStopLost();
   acceptAmountLostTrade();
-  isSpanHorizontal();
-  // fermeture du trade par cloture de bougie
-  closeByBougieMM();
+  // isSpanHorizontal();
 }
 //+------------------------------------------------------------------+
 //| Trade function                                                   |
@@ -99,9 +98,9 @@ void OnTrade()
 void closeByBougieMM(int mm = 20)
 {
   // Récupérer le prix de clôture de la dernière bougie
-  double last_close = iClose(Symbol(), 0, 1);
+  double last_close = iClose(Symbol(), 0, 0);
   // Récupérer le prix d'ouverture de la dernière bougie
-  double last_open = iOpen(Symbol(), 0, 1);
+  double last_open = iOpen(Symbol(), 0, 0);
 
   // Tableau pour stocker les valeurs de la moyenne mobile 20
   double myMovingAverageArray[];
@@ -111,50 +110,80 @@ void closeByBougieMM(int mm = 20)
 
   // Vérifier si le prix de clôture et d'ouverture de la dernière bougie sont en dessous de la moyenne mobile 20
   // si je suis en dessous et que je suis en achat je ferme
-  if (last_close < myMovingAverageArray[0] && last_open < myMovingAverageArray[0])
+  if (currentTypeTrade == 1 && last_close <= myMovingAverageArray[0] && last_open <= myMovingAverageArray[0])
   {
-    if (currentTypeTrade == 1)
-    {
-      closeTrade();
-      // Comment("DESSOUS : ", myMovingAverageArray[0]);
-    }
+    closeTrade(false);
+    Comment("FERMETURE ACHAT : ", myMovingAverageArray[0]);
   }
-  // Vérifier si la bougie se situe sur la droite
-  else if (last_close > myMovingAverageArray[0] && last_open > myMovingAverageArray[0])
+  else if (currentTypeTrade == 2 && last_close >= myMovingAverageArray[0] && last_open >= myMovingAverageArray[0])
   {
-    if (currentTypeTrade == 2)
-    {
-      closeTrade();
-      // Comment("DESSUS", myMovingAverageArray[0]);
-    }
+    closeTrade();
+    Comment("FERMETURE VENTE : ", myMovingAverageArray[0]);
+  }
+  else
+  {
+    //
   }
 }
+
+// retourne 1 si la bougie la fermeture de la bougie se fait au dessus
+// 2 si la femeture en dessous et 0 par default
+// verfication sur les deux derniers ou pas
+int isCandleAboveLowByMM(int mm)
+{
+  double last_close = iClose(Symbol(), 0, 1);
+  double last_open = iOpen(Symbol(), 0, 1);
+
+  // Tableau pour stocker les valeurs de la moyenne mobile 20
+  double myMovingAverageArray[];
+  int mm20_handle = iMA(NULL, 0, mm, 1, MODE_SMA, PRICE_CLOSE);
+  ArraySetAsSeries(myMovingAverageArray, true);
+  CopyBuffer(mm20_handle, 0, 0, 3, myMovingAverageArray);
+
+  // Vérifier si le prix de clôture et d'ouverture de la dernière bougie sont en dessous de la MM20
+  int candleAboveLowByMMVal = 0;
+  if (last_close < myMovingAverageArray[0])
+  {
+    candleAboveLowByMMVal = 2;
+  }
+
+  else if (last_close > myMovingAverageArray[0])
+  {
+    candleAboveLowByMMVal = 1;
+  }
+  else
+  {
+    candleAboveLowByMMVal = 0;
+  }
+
+  return candleAboveLowByMMVal;
+}
+
 // verification ex. si la MM7 & MM20 se croise
 // verifie si la position des MM sont en dessous ou dessus de l'axe des ordonnees en params
 // au dessus/dessous de l'axe des ordonées au moins avec une distance definie
 // si 1 achat, si 2 vente sinon rien 0
-int crossingMM(int mm7 = 7, int mm20 = 20)
+int crossingMM()
 {
 
-  double myMovingAverrageArray1[], myMovingAverrageArray2[];
+  double myMovingAverrageLent[], myMovingAverrageRapide[];
+  int mmLentVal = iMA(NULL, 0, mmLent, 0, MODE_SMA, PRICE_CLOSE);     // Valeur de la moyenne mobile 7
+  int mmRapideVal = iMA(NULL, 0, mmRapide, 0, MODE_SMA, PRICE_CLOSE); // Valeur de la moyenne mobile 20
 
-  int mm7_value = iMA(NULL, 0, mm7, 0, MODE_SMA, PRICE_CLOSE);   // Valeur de la moyenne mobile 7
-  int mm20_value = iMA(NULL, 0, mm20, 0, MODE_SMA, PRICE_CLOSE); // Valeur de la moyenne mobile 20
+  ArraySetAsSeries(myMovingAverrageLent, true);
+  ArraySetAsSeries(myMovingAverrageRapide, true);
 
-  ArraySetAsSeries(myMovingAverrageArray1, true);
-  ArraySetAsSeries(myMovingAverrageArray2, true);
-
-  CopyBuffer(mm7_value, 0, 0, 3, myMovingAverrageArray1);
-  CopyBuffer(mm20_value, 0, 0, 3, myMovingAverrageArray2);
+  CopyBuffer(mmLentVal, 0, 0, 3, myMovingAverrageLent);
+  CopyBuffer(mmRapideVal, 0, 0, 3, myMovingAverrageRapide);
 
   bool checkAddTrade = checkAddTrade();
-
-  int totalPositions = PositionsTotal(); // Obtenir le nombre total de positions ouvertes
-  if ((myMovingAverrageArray1[0] > myMovingAverrageArray2[0]) &&
-      (myMovingAverrageArray1[1] < myMovingAverrageArray2[1]))
+  int isCandleAboveLowByMMVal = isCandleAboveLowByMM(20);
+  if (isCandleAboveLowByMMVal == 1 &&
+      (myMovingAverrageLent[0] > myMovingAverrageRapide[0]) &&
+      (myMovingAverrageLent[1] < myMovingAverrageRapide[1]))
   {
     // fermeture des trades en vente
-    if (checkAddTrade && (currentTypeTrade == 2 || currentTypeTrade == 0))
+    if (currentTypeTrade == 2 || currentTypeTrade == 0)
     {
       closeTrade();
     }
@@ -168,11 +197,12 @@ int crossingMM(int mm7 = 7, int mm20 = 20)
     // Comment("BUY");
   }
 
-  if ((myMovingAverrageArray1[0] < myMovingAverrageArray2[0]) &&
-      (myMovingAverrageArray1[1] > myMovingAverrageArray2[1]))
+  if (isCandleAboveLowByMMVal == 2 &&
+      (myMovingAverrageLent[0] < myMovingAverrageRapide[0]) &&
+      (myMovingAverrageLent[1] > myMovingAverrageRapide[1]))
   {
     // fermeture des trades en achat
-    if (checkAddTrade && currentTypeTrade == 1 || currentTypeTrade == 0)
+    if (checkAddTrade && (currentTypeTrade == 1 || currentTypeTrade == 0))
     {
       closeTrade(false);
     }
@@ -195,7 +225,10 @@ int crossingMM(int mm7 = 7, int mm20 = 20)
 //+-----------------------------------------------------------------------------+
 bool isSpanHorizontal()
 {
+  Ichimoku = new CiIchimoku();
+  Ichimoku.Create(_Symbol, PERIOD_CURRENT, 9, 26, 52);
   Ichimoku.Refresh(-1);
+
   double TenkanVal = Ichimoku.TenkanSen(1);
   double KijunVal = Ichimoku.KijunSen(1);
   double ChikouVal = Ichimoku.ChinkouSpan(26);
@@ -254,16 +287,16 @@ bool isSpanHorizontal()
     //
   }
 
-  Comment(messages, "\n",
-          "last_close: ", last_close, "\n",
-          "last_open: ", last_open, "\n",
-          "Tenkan Sen Value is: ", TenkanVal, "\n",
-          "Kijun Sen Value is: ", KijunVal, "\n",
-          "Chikou Span Value is: ", ChikouVal, "\n",
-          "Senkou Span A Value is: ", SpanAx1, "\n",
-          "Senkou Span B Value is: ", SpanBx1, "\n",
-          "Senkou Span Af Value is: ", SpanAxf26, "\n",
-          "Senkou Span Bf Value is: ", SpanBxf26, "\n");
+  // Comment(messages,"\n",
+  //         "last_close: ",last_close,"\n",
+  //         "last_open: ",last_open,"\n",
+  //        "Tenkan Sen Value is: ",TenkanVal,"\n",
+  //        "Kijun Sen Value is: ",KijunVal,"\n",
+  //         "Chikou Span Value is: ", ChikouVal,"\n",
+  //         "Senkou Span A Value is: ", SpanAx1,"\n",
+  //         "Senkou Span B Value is: ",SpanBx1,"\n",
+  //         "Senkou Span Af Value is: ", SpanAxf26,"\n",
+  //         "Senkou Span Bf Value is: ",SpanBxf26,"\n");
 
   return isRange;
 }
@@ -301,8 +334,14 @@ void moveStopLost()
     //--- si le Stop Loss et le Take Profit ne sont pas définis
     if (magic == numberBot && currentProfit >= profitTarget)
     {
+
+      if (currentProfit > profitTargetLent && !isLimitStopLostVal)
+      {
+        isLimitStopLostVal = true;
+      }
+
       // Calculer le niveau du stop loss à partir de mmLent ou mmRapide
-      double addStopLostVal = currentProfit > profitTargetLent ? mmLent : mmRapide;
+      int addStopLostVal = currentProfit > profitTargetLent && isLimitStopLostVal ? mmLent : mmRapide;
       double stopLossLevel = addStopLost(addStopLostVal);
 
       if (PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY)
@@ -310,9 +349,9 @@ void moveStopLost()
         // stopLossLevel = NormalizeDouble(PositionGetDouble(POSITION_PRICE_OPEN) + stopLossDistance, digits);
         if (addStopLostVal == mmLent)
         {
-          stopLossLevel = stopLossLevel - 5;
+          stopLossLevel = stopLossLevel - moveStopLostVal;
         }
-        stopLossLevel = stopLossLevel - 5;
+        stopLossLevel = stopLossLevel - moveStopLostVal;
       }
 
       else
@@ -320,9 +359,9 @@ void moveStopLost()
         // stopLossLevel = NormalizeDouble(PositionGetDouble(POSITION_PRICE_OPEN) - stopLossDistance, digits);
         if (addStopLostVal == mmLent)
         {
-          stopLossLevel = stopLossLevel + 5;
+          stopLossLevel = stopLossLevel + moveStopLostVal;
         }
-        stopLossLevel = stopLossLevel + 5;
+        stopLossLevel = stopLossLevel + moveStopLostVal;
       }
 
       //--- remise à zéro de la demande et du résultat
@@ -337,11 +376,16 @@ void moveStopLost()
       request.magic = EXPERT_MAGIC;       // MagicNumber de la position
 
       //--- affiche des informations sur la modification
-      PrintFormat("Modification de #%I64d %s", position_ticket, position_symbol);
+      // PrintFormat("Modification de #%I64d %s", position_ticket, position_symbol);
 
       //--- envoi de la demande
       if (!OrderSend(request, result))
         PrintFormat("OrderSend erreur %d", GetLastError()); // en cas d'échec de l'envoi, affiche le code de l'erreur
+      // verifier si renseigner pour sortir le profit atteint
+      if (closeToProfit > 0 && currentProfit >= closeToProfit)
+      {
+        closeTrade(PositionGetInteger(POSITION_TYPE) != POSITION_TYPE_BUY);
+      }
     }
   }
 }
@@ -416,8 +460,6 @@ void acceptAmountLostTrade()
 // fermetue du trade du current trade
 void closeTrade(bool isBuyOrSell = true)
 {
-  // Comment("CLOSE TRADES");
-  //--- déclare et initialise la demande de trading et le résultat
   MqlTradeRequest request;
   MqlTradeResult result;
   int total = PositionsTotal(); // nombre de positions ouvertes
@@ -459,9 +501,10 @@ void closeTrade(bool isBuyOrSell = true)
       //--- envoi la demande
       if (!OrderSend(request, result))
         Comment("Order close Send erreur %d", GetLastError()); // en cas d'échec de l'envoi, affiche le code d'erreur
-                                                               //--- informations sur l'opération
-                                                               // PrintFormat("retcode=%u  transaction=%I64u  ordre=%I64u",result.retcode,result.deal,result.order);
-                                                               //---
+      //--- informations sur l'opération
+      // PrintFormat("retcode=%u  transaction=%I64u  ordre=%I64u",result.retcode,result.deal,result.order);
+      //---
+      currentTypeTrade = 0;
     }
   }
 }
@@ -470,9 +513,10 @@ void closeTrade(bool isBuyOrSell = true)
 void addTrade(bool isBuyOrSell = true)
 {
   /// verifie avant de rentrer dans le marché que c'est pas range dans le nuage'
-  bool isRange = isSpanHorizontal();
+  // bool isRange = isSpanHorizontal();
   if (true)
   {
+    isLimitStopLostVal = false;
     // TODO ne pas ajouter de trade si span a & span b horizontal
     string position_symbol = PositionGetString(POSITION_SYMBOL);         // symbole
     int digits = (int)SymbolInfoInteger(position_symbol, SYMBOL_DIGITS); // nombre de décimales
@@ -493,13 +537,15 @@ void addTrade(bool isBuyOrSell = true)
     {
       // sl=NormalizeDouble(bid-price_level,digits);
       // tp=NormalizeDouble(bid+price_level,digits);
-      sl = valAddStopLost - 10;
+      sl = valAddStopLost - addTradeSl;
+      // tp = -60;
     }
     else
     {
       // sl=NormalizeDouble(ask+price_level,digits);
       // tp=NormalizeDouble(ask-price_level,digits);
-      sl = valAddStopLost + 10;
+      sl = valAddStopLost + addTradeSl;
+      // tp = 60;
     }
 
     //--- déclare et initialise la demande de trading et le résultat de la demande
@@ -573,13 +619,6 @@ bool isTimeToTrade()
     isTimeTOTradeVal = false;
   }
   return isTimeTOTradeVal;
-}
-
-// verifier si la MM200 est plutot orienté de facon horizontal pour avertir d'un range sur une x nombre de periode
-// l'idee est de prendre le y point en ordonnee des x derniere periode à maintenant si pas trop de difference : range
-bool isRange()
-{
-  return false;
 }
 
 // verifier si la mèche de la bougie est 3 fois plus grande que le corps de la bougie
