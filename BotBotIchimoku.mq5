@@ -9,7 +9,7 @@
 
 #include <Trade\Trade.mqh>
 #include <Arrays\ArrayObj.mqh>
-#include <Arrays\ArrayInt.mqh>
+// #include <Arrays\ArrayInt.mqh>
 #include <Indicators/Trend.mqh>
 
 CiIchimoku *Ichimoku;
@@ -18,33 +18,33 @@ CiIchimoku *IchimokuLow;
 
 input double percentProfit = 0.1; // pourcentage profit sur capital
 input double percentRisk = -0.05; // pourcentage risque sur capital
+input int numberBot = 20230407;   // identifiant du robot à modifier si marche en double
+input int sessionTradeMax = 1;    // nombre de trade maximum pour un bot
+input int stopLostVal = 10;       // nombre de point sl
+input int moveStopLostValx = 10;  // ajout de la marge du sl
+input int profitTarget = 30;      // breakevent sur profit maximal
+input double lotSize = 1;         // lot correspondant à 1 EUR par point pour DJ30, DAX, NAS100
 input double uTime = 5;           // unité de temps en min : 1, 5 & 15
 
 // gestion du lot en fonction du risque
-input double riskLotMini = 0.5;  // lorsque la tandance est unique à U0
-input double riskLotMoyMini = 1; // lorsuqe le tendance est U0 identique à (U1 ou U2)
-input double riskLotMoy = 2;     // lorsuqe le tendance est U0 identique à (U1 ou U2)
-input double riskLotHigh = 3;    // lorsque la tendance identique : U0, U1, U2
+input double riskLotMini = 1;      // lorsque la tandance est unique à U0
+input double riskLotMoyMini = 1.5; // lorsuqe le tendance est U0 identique à (U1 ou U2)
+input double riskLotMoy = 2;       // lorsuqe le tendance est U0 identique à (U1 ou U2)
+input double riskLotHigh = 3;      // lorsque la tendance identique : U0, U1, U2
 
 // gestion de perte pour fermeture du trade
-input double riskLostMini = -15;    // Perte maximal lorsque la tandance est unique à U0
-input double riskLostMoyMini = -20; // Perte maximal lorsuqe le tendance est U0 identique à (U1 ou U2)
-input double riskLostMoy = -30;     // Perte maximal lorsuqe le tendance est U0 identique à (U1 ou U2)
-input double riskLostHigh = -40;    // Perte maximal lorsque la tendance identique : U0, U1, U2
+input double riskLostMini = -20;    // Perte maximal lorsque la tandance est unique à U0
+input double riskLostMoyMini = -25; // Perte maximal lorsuqe le tendance est U0 identique à (U1 ou U2)
+input double riskLostMoy = -40;     // Perte maximal lorsuqe le tendance est U0 identique à (U1 ou U2)
+input double riskLostHigh = -60;    // Perte maximal lorsque la tendance identique : U0, U1, U2
 
 // gestion de profit pour fermer le trade en fonction du lot
-input double profitMini = 0;     // profit maximal lorsque la tandance est unique à U0
-input double profitMoyMini = 15; // profit maximal lorsuqe le tendance est U0 identique à (U1 ou U2)
-input double profitMoy = 0;      // profit maximal lorsuqe le tendance est U0 identique à (U1 ou U2)
-input double profitHigh = 0;     // profit maximal lorsque la tendance identique : U0, U1, U2
+input double profitMini = 0;    // profit maximal lorsque la tandance est unique à U0
+input double profitMoyMini = 0; // profit maximal lorsuqe le tendance est U0 identique à (U1 ou U2)
+input double profitMoy = 0;     // profit maximal lorsuqe le tendance est U0 identique à (U1 ou U2)
+input double profitHigh = 0;    // profit maximal lorsque la tendance identique : U0, U1, U2
 
-input int numberBot = 20230407;  // identifiant du robot à modifier si marche en double
-input int sessionTradeMax = 1;   // nombre de trade maximum pour un bot
-input int stopLostVal = 8;       // nombre de point sl
-input int moveStopLostValx = 10; // ajout de la marge du sl
-input int profitTarget = 40;     // profit maximal pour declanche le breakevent
-input double lotSize = 1;        // lot correspondant à 1 EUR par point pour DJ30, DAX, NAS100
-
+// gestion du temps de trade
 input int hourStartTrade = 9; // heure de debut de trade
 input int hourEndTrade = 22;  // heure de fin de trade
 
@@ -55,8 +55,11 @@ string message = "RECHERCHE";
 // Variables globales pour stocker les valeurs précédentes de priceAboveCloud et priceLowCloud
 bool previousPriceAboveCloud = false;
 bool previousPriceLowCloud = false;
-int sizeEssouflement = 3;
 
+int sizeEssouflement = 2;     // nombre de perte concecutif sur une tendance pour verifier un essouflement
+int initSizeEssouflement = 2; // init lors de changement de tendance
+
+double iMomentumValx = 0.0;
 // gestion management money
 double objectifProfitByDay = 180.0; // Montant de la journee à ne pas perdre si atteint depuis le portefeuil
 double objectifLostByDay = -75.0;   // objectif de perte maximal par jour du portefeuil
@@ -65,7 +68,7 @@ double lostTarget = -20.0;          // fermeture du trade si perte maximal
 double lotSizeRisk = 2;
 int lostByTradeMax = 4;             // nombre de perte par session de trade ou jour
 int moveStopLostVal = 5;            // ajout de la marge du sl
-double cassureFrancheVal = 0;       // definition de la val pour determiner si cassure francge
+double cassureFrancheVal = 0.5;     // definition de la val pour determiner si cassure franche
 bool isAddSlSecureByCandle = false; // verfier si la securite a ete ajoute
 
 #define EXPERT_MAGIC numberBot;
@@ -128,7 +131,7 @@ void OnTick()
   double SpanBx1Current = Ichimoku.SenkouSpanB(1);
   int uTimeTendanceCurrentVal = uTimeTendance(SpanAx1Current, SpanBx1Current);
 
-  double ChinkouSpan = Ichimoku.ChinkouSpan(1);
+  // double ChinkouSpan = Ichimoku.ChinkouSpan(1);
 
   // Récupère la tendance de milieu
   double SpanAx1Mid = IchimokuMid.SenkouSpanA(1);
@@ -151,13 +154,15 @@ void OnTick()
   bool tekanLowKinjunx = tekanLowKinjun();
   bool tekanAboveKinjunx = tekanAboveKinjun();
 
-  bool tenkanPriceCrossAbove = tenkanPriceCrossing(false);
-  bool tenkanPriceCrossLow = tenkanPriceCrossing(true);
-  bool kinjunPriceCrossAbove = kinjunPriceCrossing(false);
-  bool kinjunPriceCrossLow = kinjunPriceCrossing(true);
+  bool tenkanPriceCrossAbove = tenkanPriceCrossing();
+  bool tenkanPriceCrossLow = tenkanPriceCrossAbove;
+  bool kinjunPriceCrossAbove = kinjunPriceCrossing();
+  bool kinjunPriceCrossLow = kinjunPriceCrossAbove;
+  bool SenkouSpanAPriceCrossingVal = SenkouSpanAPriceCrossing();
+
   // int tekanCrossKinjunDirectionVal = tekanCrossKinjunDirection();
 
-  bool bearishCoLorCandlex = bearishCoLorCandle();
+  bool bearishCoLorCandlex = bearishColorCandle();
   bool tekanCrossKinjunx = tekanCrossinjun();
 
   bool isTimeToTradeVal = isTimeToTrade();
@@ -165,51 +170,74 @@ void OnTick()
   bool chikouIsFreexSell = chikouIsFree(2);
   double valGetTotalProfitToday = GetTotalProfitToday();
   // int tekanDirectionVal = tekanDirection();
-  int totalPositions = PositionsTotal();
 
+  // gestion de fermeture
+  int totalPositions = PositionsTotal();
   // conditions de fermeture de trade
   bool isCloseBuy = tekanCrossKinjunx || ((kinjunPriceCrossAbove || kinjunPriceCrossLow) && bearishCoLorCandlex);
   bool isCloseSell = tekanCrossKinjunx || ((kinjunPriceCrossAbove || kinjunPriceCrossLow) && !bearishCoLorCandlex);
 
+  // fermeture en fonction du momentum
+  bool closeTradeByMomentumtVal = closeTradeByMomentumt();
+  bool isPositionOnCurrentCandleVal = isPositionOnCurrentCandle();
+
+  // maj de l'essouflement d'un mouvement tekan/addtrade casse par la bougie au sens du marche
+  Essouflement(priceAboveCloud, priceLowCloud, priceInCloud, tenkanPriceCrossAbove, tenkanPriceCrossLow, bearishCoLorCandlex);
+
+  // tech. de tradosaure
+  int isAddTradeByCrossTekanKinjunVal = 0;
+  if (!isPositionOnCurrentCandleVal && totalPositions <= sessionTradeMax && !closeTradeByMomentumtVal &&
+      (isTimeToTradeVal && (valGetTotalProfitToday == 0 || objectifLostByDay < valGetTotalProfitToday)) &&
+      (valGetTotalProfitToday < objectifProfitByDay) && !priceInCloud && lostByTradeMax > 0)
+  {
+    isAddTradeByCrossTekanKinjunVal = isAddTradeByCrossTekanKinjun(
+        tekanCrossKinjunx,
+        priceAboveCloud,
+        priceLowCloud,
+        chikouIsFreexBuy,
+        chikouIsFreexSell,
+        tekanLowKinjunx,
+        tekanAboveKinjunx,
+        priceInCloud);
+  }
+
   // verfication de sortie si deux bougies baissier
   // ou casure de kinjun par bougie rouge
-  if (totalPositions > 0 && priceAboveCloud && isCloseBuy)
+  if (totalPositions > 0 && priceAboveCloud && isCloseBuy && isAddTradeByCrossTekanKinjunVal == 0)
   {
-    closeTrade(priceAboveCloud);
+    // closeTrade(priceAboveCloud);
     message = "CLOSE TRADE ABOVE";
   }
   // cassure kinjun par une bougie verte
-  if (totalPositions > 0 && priceLowCloud && isCloseSell)
+  if (totalPositions > 0 && priceLowCloud && isCloseSell && isAddTradeByCrossTekanKinjunVal == 0)
   {
-    closeTrade(!priceLowCloud);
+    // closeTrade(!priceLowCloud);
     message = "CLOSE TRADE LOW";
   }
 
-  // initialisation si une nouvel timing
+  // initialisation du risk si une nouvel timing
   if (!isTimeToTradeVal)
   {
     calculRisk();
   }
 
-  // maj de l'essouflement d'un mouvement tekan casse par la bougie au sens du marche
-  Essouflement(priceAboveCloud, priceLowCloud, priceInCloud, tenkanPriceCrossAbove, tenkanPriceCrossLow, bearishCoLorCandlex);
-
-  if ((isTimeToTradeVal &&
-       (valGetTotalProfitToday == 0 || objectifLostByDay < valGetTotalProfitToday)) &&
+  if (!closeTradeByMomentumtVal && !isPositionOnCurrentCandleVal && totalPositions < sessionTradeMax &&
+      !tekanCrossKinjunx && !isCloseBuy && isAddTradeByCrossTekanKinjunVal == 0 &&
+      (isTimeToTradeVal && (valGetTotalProfitToday == 0 || objectifLostByDay < valGetTotalProfitToday)) &&
       (valGetTotalProfitToday < objectifProfitByDay) && !priceInCloud && lostByTradeMax > 0)
   {
-
     // verification si le prix n'es pas dans le nuage
     bool checkAddTrade = checkAddTrade();
     if (priceAboveCloud &&
         chikouIsFreexBuy &&
         tekanAboveKinjunx &&
-        (tenkanPriceCrossAbove || kinjunPriceCrossAbove) &&
-        bearishCoLorCandlex &&
+        (tenkanPriceCrossAbove || SenkouSpanAPriceCrossingVal) &&
+        !bearishCoLorCandlex &&
         sizeEssouflement > 0 &&
+        isAddTradeByCrossTekanKinjunVal == 0 &&
+        // (tenkanPriceCrossAbove || kinjunPriceCrossAbove) &&
+        // kinjunPriceCrossAbove &&
         // sameDirectionUTendaneVal > 0 &&
-        !tekanCrossKinjunx &&
-        !isCloseBuy &&
         // tekanDirectionVal == 2 &&
         checkAddTrade)
     {
@@ -220,12 +248,13 @@ void OnTick()
     if (priceLowCloud &&
         chikouIsFreexSell &&
         tekanLowKinjunx &&
-        (tenkanPriceCrossLow || kinjunPriceCrossLow) &&
-        !bearishCoLorCandlex &&
+        (tenkanPriceCrossLow || SenkouSpanAPriceCrossingVal) &&
+        bearishCoLorCandlex &&
         sizeEssouflement > 0 &&
+        isAddTradeByCrossTekanKinjunVal == 0 &&
+        // (tenkanPriceCrossLow || kinjunPriceCrossLow) &&
+        // kinjunPriceCrossLow &&
         // sameDirectionUTendaneVal > 0 &&
-        !tekanCrossKinjunx &&
-        !isCloseSell &&
         // tekanDirectionVal == 1 &&
         checkAddTrade)
     {
@@ -239,7 +268,7 @@ void OnTick()
   datetime currentTime = TimeCurrent();
 
   Comment("isTimeToTradeVal : ", isTimeToTradeVal, " : ", TimeToString(currentTime, TIME_DATE | TIME_MINUTES), "\n",
-          "message : ", message, "\n",
+          // "message : ", message, "\n",
           "PnL : ", valGetTotalProfitToday, "\n",
           "lostByTradeMax : ", lostByTradeMax, "\n",
           "objectifProfitByDay : ", objectifProfitByDay, "\n",
@@ -248,18 +277,22 @@ void OnTick()
           "uTimeTendanceCurrentVal : ", uTimeTendanceCurrentVal, "\n",
           "uTimeTendanceMidVal : ", uTimeTendanceMidVal, "\n",
           "uTimeTendanceLowVal : ", uTimeTendanceLowVal, "\n",
+          "chikouIsFreexBuy : ", chikouIsFreexBuy, "\n",
+          "chikouIsFreexSell : ", chikouIsFreexSell, "\n",
+          "sizeEssouflement : ", sizeEssouflement, "\n",
+          "iMomentumValx : ", iMomentumValx, "\n"
           // "tekanCrossKinjunDirectionVal : ", tekanCrossKinjunDirectionVal, "\n",
           // "DESSOUS : ", priceLowCloud, "\n",
           // "TEKAN CROSS PRICE : ", tenkanPriceCross, "\n",
           // "KINJUN CROSS PRICE : ", kinjunPriceCross, "\n",
-          "tekanAboveKinjunx : ", tekanAboveKinjunx, "\n",
-          "tekanLowKinjunx : ", tekanLowKinjunx, "\n",
-          "sizeEssouflement : ", sizeEssouflement, "\n",
+          // "tekanAboveKinjunx : ", tekanAboveKinjunx, "\n",
+          // "tekanLowKinjunx : ", tekanLowKinjunx, "\n",
           // "2 PRICE LOW TEKAN : ", tekanLowLast2Price, "\n",
           // "TEKAN DIRECTION : ", tekanDirectionVal, "\n",
-          "ChinkouSpan : ", ChinkouSpan, "\n",
-          "2 PRICE ABOVE TEKAN : ", tekanAboveLast2PriceCross, "\n",
-          "TEKAN CROSS KINJUN : ", tekanCrossKinjunx, "\n");
+          // "ChinkouSpan : ", ChinkouSpan, "\n",
+          // "2 PRICE ABOVE TEKAN : ", tekanAboveLast2PriceCross, "\n",
+          // "TEKAN CROSS KINJUN : ", tekanCrossKinjunx, "\n"
+  );
 }
 //+------------------------------------------------------------------+
 //| Trade function                                                   |
@@ -270,6 +303,158 @@ void OnTrade()
 }
 
 //+------------------------------------------------------------------+
+
+//+---------------------------------------------------------------------+
+//| fermeture du trade par le momentum en fonction de l'entree du trade |
+//+---------------------------------------------------------------------+
+bool closeTradeByMomentumt()
+{
+  bool closeTradeByMomentumtVal = false;
+  int totalPositions = PositionsTotal();
+  double myIMomentumVal = 0.0;
+  double iMomentumVal = 0.0;
+  double myPricesArray[];
+  ArraySetAsSeries(myPricesArray, true);
+
+  if (uTime == 5)
+  {
+    iMomentumVal = iMomentum(_Symbol, PERIOD_M5, 14, PRICE_CLOSE);
+  }
+  else if (uTime == 15)
+  {
+    iMomentumVal = iMomentum(_Symbol, PERIOD_M15, 14, PRICE_CLOSE);
+  }
+  else
+  {
+    iMomentumVal = iMomentum(_Symbol, PERIOD_M1, 14, PRICE_CLOSE);
+  }
+
+  CopyBuffer(iMomentumVal, 0, 0, 3, myPricesArray);
+  myIMomentumVal = NormalizeDouble(myPricesArray[0], 2);
+  iMomentumValx = myIMomentumVal;
+
+  if (myIMomentumVal < 100.0 && totalPositions > 0 && priceAboveCloud)
+  {
+    closeTrade(priceAboveCloud);
+    closeTradeByMomentumtVal = true;
+    Print("STRONG : ", myIMomentumVal);
+  }
+  if (myIMomentumVal > 99.99 && totalPositions > 0 && priceLowCloud)
+  {
+    closeTrade(!priceLowCloud);
+    closeTradeByMomentumtVal = true;
+    Print("WEAK : ", myIMomentumVal);
+  }
+
+  if (myIMomentumVal > 99.9 && myIMomentumVal < 100.0)
+  {
+    Print("NEUTRE MOMENTUM : ", myIMomentumVal);
+  }
+
+  return closeTradeByMomentumtVal;
+}
+
+//+------------------------------------------------------------------+
+//|ajout du trade par croisement lors de changement de tendance      |
+//|tech tradosaure ex. en ACHAT:                                     |
+//|Prix au-dessus du nuage.                                          |
+//|Tenkan croise la Kijunà la hausse,                                |
+//|au-dessus du nuage.                                               |
+//|Chinkou au-dessus du prix                                         |
+//| reponse haussier : 2, baissier : 1 & neutre : 0                  |
+//+------------------------------------------------------------------+
+int isAddTradeByCrossTekanKinjun(
+    bool tekanCrossKinjunx,
+    bool priceAboveCloudx,
+    bool priceLowCloudx,
+    bool chikouIsFreexBuyx,
+    bool chikouIsFreexSellx,
+    bool tekanLowKinjunx,
+    bool tekanAboveKinjunx,
+    bool priceInCloudx)
+{
+
+  int isAddTradeByCrossTekanKinjunVal = 0;
+  int totalPositions = PositionsTotal();
+
+  double SpanAx1 = Ichimoku.SenkouSpanA(1);
+  double SpanAx2 = Ichimoku.SenkouSpanA(2);
+  double SpanBx1 = Ichimoku.SenkouSpanB(1);
+  double SpanBx2 = Ichimoku.SenkouSpanB(2);
+
+  double TenkanSen = Ichimoku.TenkanSen(1);
+  double KijunSen = Ichimoku.KijunSen(1);
+
+  bool isTekanAboveLowCloud = TenkanSen > SpanAx2 && TenkanSen > SpanBx2 && TenkanSen > SpanAx1 && TenkanSen > SpanBx1;
+  bool isKinjunAboveLowCloud = KijunSen > SpanAx2 && KijunSen > SpanBx2 && KijunSen > SpanAx1 && KijunSen > SpanBx1;
+
+  // Print("TenkanSen : ", TenkanSen, " ==> ", isTekanAboveLowCloud);
+  // Print("KijunSen : ", KijunSen, " ==> ", isKinjunAboveLowCloud);
+
+  if (totalPositions < sessionTradeMax &&
+      tekanCrossKinjunx &&
+      priceAboveCloudx &&
+      chikouIsFreexBuyx &&
+      ((isTekanAboveLowCloud && isKinjunAboveLowCloud) || priceInCloudx) &&
+      tekanAboveKinjunx)
+  {
+    isAddTradeByCrossTekanKinjunVal = 2;
+    calculRisk(riskLostMoyMini, profitMoyMini, riskLotMoyMini);
+    // addTrade();
+    Print("......ACHAT :", isAddTradeByCrossTekanKinjunVal);
+  }
+  else if (totalPositions < sessionTradeMax &&
+           tekanCrossKinjunx &&
+           priceLowCloudx &&
+           chikouIsFreexSellx &&
+           ((!isTekanAboveLowCloud && !isKinjunAboveLowCloud) || priceInCloudx) &&
+           tekanLowKinjunx)
+  {
+    isAddTradeByCrossTekanKinjunVal = 1;
+    calculRisk(riskLostMoyMini, profitMoyMini, riskLotMoyMini);
+    // addTrade(false);
+    Print(".....VENTE :", isAddTradeByCrossTekanKinjunVal);
+  }
+  else
+  {
+    isAddTradeByCrossTekanKinjunVal = 0;
+    // Print("NEUTRE :", isAddTradeByCrossTekanKinjunVal);
+  }
+  return isAddTradeByCrossTekanKinjunVal;
+}
+
+//+------------------------------------------------------------------+
+//| verifie si sur la bougie actuelle on a une position              |
+//+------------------------------------------------------------------+
+bool isPositionOnCurrentCandle()
+{
+  // Vérifier si une position est ouverte sur le symbole actuel
+  bool position_opened = PositionSelect(Symbol());
+  if (position_opened)
+  {
+    return true;
+  }
+
+  datetime currentCandleTime = iTime(Symbol(), 0, 0);
+  int totalPositions = PositionsTotal();
+  bool position_found = false;
+
+  for (int i = 0; i < totalPositions && !position_found; i++)
+  {
+    ulong ticket = PositionGetTicket(i);
+    datetime positionOpenTime = PositionGetInteger(POSITION_TIME, ticket);
+    datetime positionCloseTime = PositionGetInteger(POSITION_TIME_UPDATE, ticket);
+
+    // Vérifier si la position a été ouverte ou fermée sur la bougie actuelle
+    if (positionOpenTime == currentCandleTime || positionCloseTime == currentCandleTime)
+    {
+      position_found = true;
+      break;
+    }
+  }
+
+  return position_found;
+}
 
 //+----------------------------------------------------------------------------+
 //|verifier si la tekan a ete casse au moins 3 fois dans le sens de la tendance|
@@ -285,7 +470,7 @@ void Essouflement(
 {
   if (priceAboveCloudx != previousPriceAboveCloud || priceLowCloudx != previousPriceLowCloud || priceInCloud)
   {
-    sizeEssouflement = 3;
+    sizeEssouflement = initSizeEssouflement;
   }
   else if (sizeEssouflement > 0 && !priceInCloud &&
            ((tenkanPriceCrossAbove && !bearishCoLorCandlex == priceAboveCloudx) ||
@@ -405,12 +590,12 @@ int sameDirectionUTendane(int currentUT, int midUT, int lowUT)
   }
   else if ((currentUT == 0 || currentUT == 2) && currentUT == lowUT && lowUT == currentUT)
   {
-    calculRisk(riskLostHigh, profitHigh, riskLotHigh, 20);
+    calculRisk(riskLostHigh, profitHigh, riskLotHigh);
     sameDirectionUTendane = 4;
   }
   else
   {
-    calculRisk(riskLostHigh, profitMini, riskLotMini, 10);
+    calculRisk(riskLostHigh, profitMini, riskLotMini);
     sameDirectionUTendane = 0;
   }
   return sameDirectionUTendane;
@@ -495,16 +680,20 @@ double GetTotalProfitToday()
 //+------------------------------------------------------------------+
 //| calcule risque perte, profit & lot                               |
 //+------------------------------------------------------------------+
-void calculRisk(double lostTargetVal = -30, double closeToProfitVal = 0, double lotSizeRiskVal = 1, int moveStopLostValParam = 20)
+void calculRisk(
+    double lostTargetVal = -30,
+    double closeToProfitVal = 0,
+    double lotSizeRiskVal = 1,
+    int moveStopLostValParam = 20)
 {
   double capital = AccountInfoDouble(ACCOUNT_BALANCE);
-  objectifProfitByDay = (capital * percentProfit) * 4;
-  objectifLostByDay = (capital * percentRisk) * 15;
-  lostTarget = lostTargetVal;       // capital * percentRisk;
-  closeToProfit = closeToProfitVal; // capital * percentProfit;
+  objectifProfitByDay = 1000;           // (capital * percentProfit) * 4;
+  objectifLostByDay = 3 * riskLostHigh; // (capital * percentRisk) * 4;
+  lostTarget = lostTargetVal;           // capital * percentRisk;
+  closeToProfit = closeToProfitVal;     // capital * percentProfit;
   lotSizeRisk = lotSizeRiskVal;
   moveStopLostVal = moveStopLostValParam;
-  lostByTradeMax = 124;
+  lostByTradeMax = 4;
 }
 
 // verifie si le prix se situe en dessous ou au dessus du nuage SI TRUE au dessus du nuage
@@ -535,7 +724,9 @@ void aboveLowCloud()
 }
 //+------------------------------------------------------------------+
 
-// retourne true si le prix est dans le nuage
+//+------------------------------------------------------------------+
+//| retourne true si le prix est dans le nuage                       |
+//+------------------------------------------------------------------+
 bool priceInCloud()
 {
   double SpanAx1 = Ichimoku.SenkouSpanA(1);
@@ -546,50 +737,141 @@ bool priceInCloud()
   bool isRange = last_close < SpanAx1 && last_open < SpanAx1 && last_close > SpanBx1 && last_open > SpanBx1;
   return isRange;
 }
-// le prix à la baisse croise la tenkan
-// il faut que le prix d'ouverture & fermture est une differencte d'au moins 5
-bool tenkanPriceCrossing(bool isAboveLow)
+
+//+------------------------------------------------------------------+
+//| cassure ou rebond sur la ssa en fonction du sens du marche       |
+//+------------------------------------------------------------------+
+bool SenkouSpanAPriceCrossing()
+{
+  double SenkouSpanAVal = Ichimoku.SenkouSpanA(1);
+  double last_close = iClose(Symbol(), 0, 1);
+  double last_open = iOpen(Symbol(), 0, 1);
+  double last_high = iHigh(Symbol(), 0, 1);
+  double last_low = iLow(Symbol(), 0, 1);
+
+  bool upperWickCross = false;
+  bool lowerWickCross = false;
+
+  double upperWick = last_high - MathMax(last_open, last_close);
+  double lowerWick = MathMin(last_open, last_close) - last_low;
+
+  int totalPositions = PositionsTotal();
+
+  bool priceInCloudVal = priceInCloud();
+
+  double corps_longueur = MathAbs(last_close - last_open);
+  double meche_longueur_superieure = last_high - MathMax(last_open, last_close);
+  double meche_longueur_inferieure = MathMin(last_open, last_close) - last_low;
+  double meche_longueur_totale = meche_longueur_superieure + meche_longueur_inferieure;
+  // La mèche est au moins deux fois plus longue que le corps de la bougie.
+  bool isWickTwiceLonger = corps_longueur > 0 && meche_longueur_totale >= (2 * corps_longueur);
+
+  if (!priceInCloudVal && priceAboveCloud && totalPositions < sessionTradeMax && isWickTwiceLonger)
+  {
+    lowerWickCross = lowerWick > 0 && last_low < SenkouSpanAVal && last_close > SenkouSpanAVal;
+  }
+  if (!priceInCloudVal && priceLowCloud && totalPositions < sessionTradeMax && isWickTwiceLonger)
+  {
+    upperWickCross = upperWick > 0 && last_high > SenkouSpanAVal && last_close > SenkouSpanAVal;
+  }
+
+  if (upperWickCross || lowerWickCross)
+  {
+    calculRisk(riskLostMoy, profitMoy, riskLotMoy);
+  }
+
+  // Retourner true si l'une des mèches croise la Senkou Span A
+  // return upperWickCross || lowerWickCross;
+  return false;
+}
+
+// le prix la croise la tenkan & verif casssure franche
+bool tenkanPriceCrossing()
 {
   double TenkanVal = Ichimoku.TenkanSen(1);
   double last_close = iClose(Symbol(), 0, 1);
   double last_open = iOpen(Symbol(), 0, 1);
+  double last_high = iHigh(Symbol(), 0, 1);
+  double last_low = iLow(Symbol(), 0, 1);
+
+  bool tenkanPriceCross = false;
   bool isCassureFranche = false;
 
-  // verfication cassure franche avec un pips definit : vente
-  if (isAboveLow)
+  // gestion du rebond sur la tenkan cassure à partir de la meche
+  bool upperWickCross = last_high > TenkanVal && last_close > TenkanVal && last_open < TenkanVal;
+  bool lowerWickCross = last_low < TenkanVal && last_close < TenkanVal && last_open > TenkanVal;
+  if (upperWickCross || lowerWickCross)
   {
-    isCassureFranche = (TenkanVal - last_open) > cassureFrancheVal && (last_close - TenkanVal) > cassureFrancheVal;
+    double corps_longueur = MathAbs(last_close - last_open);
+    double meche_longueur_superieure = last_high - MathMax(last_open, last_close);
+    double meche_longueur_inferieure = MathMin(last_open, last_close) - last_low;
+    double meche_longueur_totale = meche_longueur_superieure + meche_longueur_inferieure;
+    // La mèche est au moins deux fois plus longue que le corps de la bougie.
+    bool isWickTwiceLonger = meche_longueur_totale >= 0.5 * corps_longueur;
+    tenkanPriceCross = isWickTwiceLonger;
   }
-  else
+  if (!tenkanPriceCross)
   {
-    isCassureFranche = (last_open - TenkanVal) > cassureFrancheVal && (TenkanVal - last_close) > cassureFrancheVal;
+    tenkanPriceCross = (last_open > TenkanVal && last_close < TenkanVal) ||
+                       (last_open < TenkanVal && last_close > TenkanVal);
+
+    // verification cassure franche
+    isCassureFranche = MathAbs((TenkanVal - last_open)) > cassureFrancheVal &&
+                       MathAbs((TenkanVal - last_close)) > cassureFrancheVal;
+    // quand la cassure n'est pas franche passe au mini
+    if (!isCassureFranche && tenkanPriceCross)
+    {
+      calculRisk(riskLostHigh, profitMini, riskLotMini, 10);
+    }
   }
 
-  bool tenkanPriceCross = (last_open > TenkanVal && last_close < TenkanVal) ||
-                          (last_open < TenkanVal && last_close > TenkanVal);
-  return tenkanPriceCross; // && isCassureFranche;
+  return tenkanPriceCross;
 }
 
-// le prix croise la kinjun
-bool kinjunPriceCrossing(bool isAboveLow)
+//+-----------------------------------------------------------------------+
+//|prix qui casse la kinjun ou rebond : isBuyOrSell false buy & true sell |
+//+-----------------------------------------------------------------------+
+bool kinjunPriceCrossing()
 {
   double KijunVal = Ichimoku.KijunSen(1);
+  double last_low = iLow(Symbol(), 0, 1);
+  double last_high = iHigh(Symbol(), 0, 1);
   double last_close = iClose(Symbol(), 0, 1);
   double last_open = iOpen(Symbol(), 0, 1);
-  bool isCassureFranche = false;
 
-  // verfication cassure franche avec un pips definit : vente
-  if (isAboveLow)
+  bool isCassureFranche = false;
+  bool isKinjunPriceCross = false;
+
+  // Définition des variables
+  double corps_longueur = MathAbs(last_close - last_open);
+  double meche_longueur_superieure = last_high - last_close;
+  double meche_longueur_inferieure = last_open - last_low;
+  double meche_longueur_totale = meche_longueur_superieure + meche_longueur_inferieure;
+
+  // Vérifier si la mèche est deux fois plus longue que le corps pour identifier le rebond
+  if (meche_longueur_totale > (2 * corps_longueur))
   {
-    isCassureFranche = ((KijunVal - last_open) > cassureFrancheVal) && ((last_close - KijunVal) > cassureFrancheVal);
+    isKinjunPriceCross = (last_high > KijunVal && last_low < KijunVal) ||
+                         (last_high < KijunVal && last_low > KijunVal);
+    // verification cassure franche
+    isCassureFranche = MathAbs((KijunVal - last_high)) > cassureFrancheVal &&
+                       MathAbs((KijunVal - last_low)) > cassureFrancheVal;
   }
   else
   {
-    isCassureFranche = ((last_open - KijunVal) > cassureFrancheVal) && ((KijunVal - last_close) > cassureFrancheVal);
+    isKinjunPriceCross = (last_open > KijunVal && last_close < KijunVal) ||
+                         (last_open < KijunVal && last_close > KijunVal);
+    // verification cassure franche
+    isCassureFranche = MathAbs((KijunVal - last_open)) > cassureFrancheVal &&
+                       MathAbs((KijunVal - last_close)) > cassureFrancheVal;
   }
 
-  bool kinjunPriceCross = (last_open > KijunVal && last_close < KijunVal) || (last_open < KijunVal && last_close > KijunVal);
-  return kinjunPriceCross; // && isCassureFranche;
+  if (!isCassureFranche)
+  {
+    calculRisk(riskLostHigh, profitMini, riskLotMini, 10);
+  }
+
+  return isKinjunPriceCross;
 }
 // verifier si la tenkan est au dessus des prix
 bool tekanAboveLast2PriceCrossing()
@@ -623,7 +905,7 @@ bool tekanAboveKinjun()
 {
   double TenkanVal = Ichimoku.TenkanSen(1);
   double KijunVal = Ichimoku.KijunSen(1);
-  bool valTekanLowKinjun = TenkanVal > KijunVal;
+  bool valTekanLowKinjun = TenkanVal >= KijunVal;
   return valTekanLowKinjun;
 }
 
@@ -632,7 +914,7 @@ bool tekanLowKinjun()
 {
   double TenkanVal = Ichimoku.TenkanSen(1);
   double KijunVal = Ichimoku.KijunSen(1);
-  bool valTekanLowKinjun = TenkanVal < KijunVal;
+  bool valTekanLowKinjun = TenkanVal <= KijunVal;
   return valTekanLowKinjun;
 }
 // verifie si la tenkan croise la kinjun
@@ -654,26 +936,33 @@ bool tekanCrossinjun()
   // Retourner true si le croisement a été détecté, sinon false
   return tenkanCrossesKijun;
 }
-// verifier si bougie rouge = true ou verte = false
-bool bearishCoLorCandle()
+
+//+------------------------------------------------------------------+
+//| verifie la couleur de la bougie haussiere true & false baissiere |
+//+------------------------------------------------------------------+
+bool bearishColorCandle()
 {
-  // Obtenir les prix de clôture et d'ouverture de la bougie précédente
   double last_close = iClose(Symbol(), 0, 1);
   double last_open = iOpen(Symbol(), 0, 1);
-
-  // Vérifier si la bougie précédente est haussière
-  bool bullishCandle = last_close > last_open;
-
-  // Retourner true si la bougie précédente est haussière, sinon false
-  return bullishCandle;
+  return last_open > last_close;
 }
-
-// ajout du stoplost en dessous de la bougie qui a casse une des droites
-// je recupere le prix le plus bas si c'est un achat et le plus haut si c'est une vente
+//+--------------------------------------------------------------------------------------+
+//| ajout du stoplost en dessous de la bougie qui a casse une des droites                |
+//| je recupere le prix le plus bas si c'est un achat et le plus haut si c'est une vente |
+//+--------------------------------------------------------------------------------------+
 double addStopLostByCandle(int positionCandle = 2, double margeSL = 0)
 {
+  double last_low = iLow(Symbol(), 0, positionCandle);
+  double last_high = iHigh(Symbol(), 0, positionCandle);
+  double lowHigh = MathAbs(last_high - last_low);
   double slost = 0;
-  bool bearishCoLorCandlex = bearishCoLorCandle();
+
+  if (lowHigh > 14)
+  {
+    // positionCandle = 0;
+  }
+
+  bool bearishCoLorCandlex = bearishColorCandle();
   if (!bearishCoLorCandlex)
   {
     slost = iLow(Symbol(), 0, positionCandle);
@@ -699,7 +988,13 @@ void addTrade(bool isBuyOrSell = true)
 {
 
   int totalPositions = PositionsTotal();
-  if (totalPositions < sessionTradeMax)
+
+  // verification de la taille de la bougie precedente
+  double last_low = iLow(Symbol(), 0, 1);
+  double last_high = iHigh(Symbol(), 0, 1);
+  double lowHigh = MathAbs(last_high - last_low);
+
+  if (totalPositions < sessionTradeMax && lowHigh < 23)
   {
     // TODO ne pas ajouter de trade si span a & span b horizontal
     string position_symbol = PositionGetString(POSITION_SYMBOL);         // symbole
@@ -806,7 +1101,6 @@ void closeTrade(bool isBuyOrSell = true)
       if (!OrderSend(request, result))
         Comment("Order close Send erreur %d", GetLastError());
 
-      // lostByTradeMax--;
       isAddSlSecureByCandle = false;
     }
   }
@@ -863,14 +1157,16 @@ void acceptAmountLostTrade()
     }
   }
 }
-
-// verifier si il atteint closeToProfit pour la premier fois
-// et mettre le stop lost à la bougie au dessus de la bougie precedente
+//+-----------------------------------------------------------------------+
+//| verifier si il atteint closeToProfit pour la premier fois             |
+//| et mettre le stop lost à la bougie au dessus de la bougie precedente  |
+//+-----------------------------------------------------------------------+
 double addSlSecureByCandle()
 {
   isAddSlSecureByCandle = true;
   double valAddStopLost = addStopLostByCandle(0, 1);
-  Print("SL SECURE : ", valAddStopLost);
+
+  // Print("SL SECURE : ", valAddStopLost);
   return valAddStopLost;
 }
 
@@ -955,8 +1251,8 @@ double addStopLostByOnOpenProfit(double addSlVal)
   double TenkanVal = Ichimoku.TenkanSen(0);
   double sprice = 0;
 
-  bool bearishCoLorCandlex = bearishCoLorCandle();
-  if (bearishCoLorCandlex)
+  bool bearishCoLorCandlex = bearishColorCandle();
+  if (!bearishCoLorCandlex)
   {
     sprice = iLow(Symbol(), 0, 0);
   }
@@ -1014,6 +1310,7 @@ bool isTimeToTrade()
   return isTimeTOTradeVal;
 }
 
+// gestion du filtre par la chinkou
 // la chikou est libre de tendance et n'a pas d'obstacle devant lui (soit 10 bougie)
 // verifier si la 26eme bougie en arriere croise la chekou
 // verifier si la chekou se trouve dans le nuage
@@ -1023,20 +1320,46 @@ bool chikouIsFree(int typeOrderChikou)
 {
   bool isChikouAboveLowCloud = false;
   bool isChikouObstacle = true;
+  bool isTenkanObstacle = false;
+  bool isKijunSenObstacle = false;
+
   int nbCandles = 26;
   // joue le role de la chikou
   double current_price = iClose(Symbol(), 0, 1);
-  double SpanAx1 = Ichimoku.SenkouSpanA(26);
-  double SpanBx1 = Ichimoku.SenkouSpanB(26);
+  // double SpanAx1= Ichimoku.SenkouSpanA(26);
+  // double SpanBx1= Ichimoku.SenkouSpanB(26);
 
   // si achat
   if (typeOrderChikou == 1)
   {
-    isChikouAboveLowCloud = current_price > SpanAx1 && current_price > SpanBx1;
+    // isChikouAboveLowCloud = current_price > SpanAx1 && current_price > SpanBx1;
     // obstacle devant la chikou verifie si le high de la bougie soit inferieur au prix de la chikou
     // obstacle à la chikou sur 5 bougie
     for (int nbCandle = nbCandles; nbCandle >= 16; nbCandle--)
     {
+      // verifier si la kinjun ne fait pas obstacle
+      double KijunSenVal = Ichimoku.KijunSen(nbCandle);
+      isKijunSenObstacle = current_price > KijunSenVal && current_price > KijunSenVal;
+      if (!isKijunSenObstacle)
+      {
+        break;
+      }
+      // verifier si la tekan ne fait pas obstacle
+      double TenkanSenVal = Ichimoku.TenkanSen(nbCandle);
+      isTenkanObstacle = current_price > TenkanSenVal && current_price > TenkanSenVal;
+      if (!isTenkanObstacle)
+      {
+        break;
+      }
+      // verifier si en face la chikou n'a pas d'obstacle de nuage devant
+      double SpanAx1 = Ichimoku.SenkouSpanA(nbCandle);
+      double SpanBx1 = Ichimoku.SenkouSpanB(nbCandle);
+      isChikouAboveLowCloud = current_price > SpanAx1 && current_price > SpanBx1;
+      if (!isChikouAboveLowCloud)
+      {
+        break;
+      }
+      // verfier si pas de bougie devant lui
       double highCandle = iOpen(Symbol(), 0, nbCandle);
       double lowCandle = iClose(Symbol(), 0, nbCandle);
       isChikouObstacle = highCandle < current_price && lowCandle < current_price;
@@ -1049,9 +1372,33 @@ bool chikouIsFree(int typeOrderChikou)
   // si vente
   if (typeOrderChikou == 2)
   {
-    isChikouAboveLowCloud = current_price < SpanAx1 && current_price < SpanBx1;
+    // isChikouAboveLowCloud = current_price < SpanAx1 && current_price < SpanBx1;
     for (int nbCandle = nbCandles; nbCandle >= 16; nbCandle--)
     {
+      // verifier si la kinjun ne fait pas obstacle
+      double KijunSenVal = Ichimoku.KijunSen(nbCandle);
+      isKijunSenObstacle = current_price > KijunSenVal && current_price > KijunSenVal;
+      if (!isKijunSenObstacle)
+      {
+        break;
+      }
+      // verifier si la tekan ne fait pas obstacle
+      double TenkanSenVal = Ichimoku.TenkanSen(nbCandle);
+      isTenkanObstacle = current_price > TenkanSenVal && current_price > TenkanSenVal;
+      if (!isTenkanObstacle)
+      {
+        break;
+      }
+
+      // verifier si en face la chikou n'a pas d'obstacle de nuage devant
+      double SpanAx1 = Ichimoku.SenkouSpanA(nbCandle);
+      double SpanBx1 = Ichimoku.SenkouSpanB(nbCandle);
+      isChikouAboveLowCloud = current_price < SpanAx1 && current_price < SpanBx1;
+      if (!isChikouAboveLowCloud)
+      {
+        break;
+      }
+      // verifier si pas d'obstacle de bougie devant lui
       double highCandle = iOpen(Symbol(), 0, nbCandle);
       double lowCandle = iClose(Symbol(), 0, nbCandle);
       isChikouObstacle = highCandle > current_price && lowCandle > current_price;
@@ -1067,8 +1414,8 @@ bool chikouIsFree(int typeOrderChikou)
   //         "CHIKOU : ",current_price,"\n",
   //         "HIGH PRICE : ", high_26,"\n",
   //         "LOW PRICE : ", low_26,"\n");
-  //  Retourner true si le prix de la Chikou-sen est compris entre les prix d'ouverture et de clôture de la 26ème barre en arrière, sinon false
-  return isChikouAboveLowCloud && isChikouObstacle;
+  //
+  return isChikouAboveLowCloud && isChikouObstacle && isTenkanObstacle && isKijunSenObstacle;
 }
 
 //+------------------------------------------------------------------+
