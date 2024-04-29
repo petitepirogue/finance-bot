@@ -4,6 +4,7 @@
         "*.mq5": "c"
     },
     "conventionalCommits.scopes": [
-        "config"
+        "config",
+        "market"
     ]
 }
