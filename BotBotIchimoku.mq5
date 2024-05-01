@@ -20,17 +20,17 @@ input double percentProfit = 0.1; // pourcentage profit sur capital
 input double percentRisk = -0.05; // pourcentage risque sur capital
 input int numberBot = 20230407;   // identifiant du robot à modifier si marche en double
 input int sessionTradeMax = 1;    // nombre de trade maximum pour un bot
-input int stopLostVal = 30;       // nombre de point sl
+input int stopLostVal = 60;       // nombre de point sl
 input int moveStopLostValx = 20;  // ajout de la marge du sl
 input int profitTarget = 20;      // breakevent sur profit maximal
 input double lotSize = 1;         // lot correspondant à 1 EUR par point pour DJ30, DAX, NAS100
 input double uTime = 5;           // unité de temps en min : 1, 5 & 15
 
 // gestion du lot en fonction du risque
-input double riskLotMini = 0.5;  // lorsque la tandance est unique à U0
-input double riskLotMoyMini = 1; // lorsuqe le tendance est U0 identique à (U1 ou U2)
-input double riskLotMoy = 2;     // lorsuqe le tendance est U0 identique à (U1 ou U2)
-input double riskLotHigh = 3;    // lorsque la tendance identique : U0, U1, U2
+input double riskLotMini = 1;    // lorsque la tandance est unique à U0
+input double riskLotMoyMini = 2; // lorsuqe le tendance est U0 identique à (U1 ou U2)
+input double riskLotMoy = 3;     // lorsuqe le tendance est U0 identique à (U1 ou U2)
+input double riskLotHigh = 4;    // lorsque la tendance identique : U0, U1, U2
 
 // gestion de perte pour fermeture du trade
 input double riskLostMini = -180;    // Perte maximal lorsque la tandance est unique à U0
@@ -39,14 +39,16 @@ input double riskLostMoy = -180;     // Perte maximal lorsuqe le tendance est U0
 input double riskLostHigh = -180;    // Perte maximal lorsque la tendance identique : U0, U1, U2
 
 // gestion de profit pour fermer le trade en fonction du lot
-input double profitMini = 0;     // profit maximal lorsque la tandance est unique à U0
-input double profitMoyMini = 15; // profit maximal lorsuqe le tendance est U0 identique à (U1 ou U2)
-input double profitMoy = 0;      // profit maximal lorsuqe le tendance est U0 identique à (U1 ou U2)
-input double profitHigh = 0;     // profit maximal lorsque la tendance identique : U0, U1, U2
+input double profitMini = 0;    // profit maximal lorsque la tandance est unique à U0
+input double profitMoyMini = 0; // profit maximal lorsuqe le tendance est U0 identique à (U1 ou U2)
+input double profitMoy = 0;     // profit maximal lorsuqe le tendance est U0 identique à (U1 ou U2)
+input double profitHigh = 0;    // profit maximal lorsque la tendance identique : U0, U1, U2
 
 // gestion du temps de trade
-input int hourStartTrade = 9; // heure de debut de trade
-input int hourEndTrade = 22;  // heure de fin de trade
+input int hourStartTrade = 9;    // heure de debut de trade
+input int hourEndTrade = 22;     // heure de fin de trade
+input int hourStartTradeBis = 9; // heure de debut de trade
+input int hourEndTradeBis = 22;  // heure de fin de trade
 
 bool priceAboveCloud = false;
 bool priceLowCloud = false;
@@ -177,11 +179,12 @@ void OnTick()
   // gestion de fermeture
   int totalPositions = PositionsTotal();
   // conditions de fermeture de trade
-  bool isCloseBuy = tekanCrossKinjunx || ((kinjunPriceCrossAbove || kinjunPriceCrossLow) && bearishCoLorCandlex);
-  bool isCloseSell = tekanCrossKinjunx || ((kinjunPriceCrossAbove || kinjunPriceCrossLow) && !bearishCoLorCandlex);
+  bool isCloseBuy = tekanCrossKinjunx;  // || ((kinjunPriceCrossAbove || kinjunPriceCrossLow) && bearishCoLorCandlex);
+  bool isCloseSell = tekanCrossKinjunx; // || ((kinjunPriceCrossAbove || kinjunPriceCrossLow) && !bearishCoLorCandlex);
 
   // fermeture en fonction du momentum
-  bool closeTradeByMomentumtVal = closeTradeByMomentumt();
+  // bool closeTradeByMomentumtVal = closeTradeByMomentumt();
+  bool closeTradeByMomentumtVal = false;
   bool isPositionOnCurrentCandleVal = isPositionOnCurrentCandle();
 
   // maj de l'essouflement d'un mouvement tekan/addtrade casse par la bougie au sens du marche
@@ -193,26 +196,27 @@ void OnTick()
       (isTimeToTradeVal && (valGetTotalProfitToday == 0 || objectifLostByDay < valGetTotalProfitToday)) &&
       (valGetTotalProfitToday < objectifProfitByDay) && !priceInCloud && lostByTradeMax > 0)
   {
-    isAddTradeByCrossTekanKinjunVal = isAddTradeByCrossTekanKinjun(
-        tekanCrossKinjunx,
-        priceAboveCloud,
-        priceLowCloud,
-        chikouIsFreexBuy,
-        chikouIsFreexSell,
-        tekanLowKinjunx,
-        tekanAboveKinjunx,
-        priceInCloud);
+    // isAddTradeByCrossTekanKinjunVal = isAddTradeByCrossTekanKinjun(
+    //                                     tekanCrossKinjunx,
+    //                                     priceAboveCloud,
+    //                                     priceLowCloud,
+    //                                     chikouIsFreexBuy,
+    //                                     chikouIsFreexSell,
+    //                                     tekanLowKinjunx,
+    //                                     tekanAboveKinjunx,
+    //                                     priceInCloud
+    //                                  );
   }
 
   // verfication de sortie si deux bougies baissier
   // ou casure de kinjun par bougie rouge ou croisement
-  if (totalPositions > 0 && priceAboveCloud && isCloseBuy && isAddTradeByCrossTekanKinjunVal == 0)
+  if (totalPositions > 0 && priceAboveCloud && isCloseBuy) // && isAddTradeByCrossTekanKinjunVal == 0)
   {
     closeTrade(priceAboveCloud);
     message = "CLOSE TRADE ABOVE";
   }
   // cassure kinjun par une bougie verte
-  if (totalPositions > 0 && priceLowCloud && isCloseSell && isAddTradeByCrossTekanKinjunVal == 0)
+  if (totalPositions > 0 && priceLowCloud && isCloseSell) // && isAddTradeByCrossTekanKinjunVal == 0)
   {
     closeTrade(!priceLowCloud);
     message = "CLOSE TRADE LOW";
@@ -234,56 +238,60 @@ void OnTick()
     if (priceAboveCloud &&
         chikouIsFreexBuy &&
         tekanAboveKinjunx &&
-        (tenkanPriceCrossAbove || SenkouSpanAPriceCrossingVal) &&
+        tenkanPriceCrossAbove &&
+        // (tenkanPriceCrossAbove || SenkouSpanAPriceCrossingVal) &&
         !bearishCoLorCandlex &&
         sizeEssouflement > 0 &&
-        isAddTradeByCrossTekanKinjunVal == 0 &&
+        // isAddTradeByCrossTekanKinjunVal == 0 &&
         // (tenkanPriceCrossAbove || kinjunPriceCrossAbove) &&
         // kinjunPriceCrossAbove &&
         // sameDirectionUTendaneVal > 0 &&
         // tekanDirectionVal == 2 &&
         checkAddTrade)
     {
-      addTrade();
       message = "ACHAT";
+      Print(message);
+      addTrade();
     }
 
     if (priceLowCloud &&
         chikouIsFreexSell &&
         tekanLowKinjunx &&
-        (tenkanPriceCrossLow || SenkouSpanAPriceCrossingVal) &&
+        tenkanPriceCrossLow &&
+        // (tenkanPriceCrossLow || SenkouSpanAPriceCrossingVal) &&
         bearishCoLorCandlex &&
         sizeEssouflement > 0 &&
-        isAddTradeByCrossTekanKinjunVal == 0 &&
+        // isAddTradeByCrossTekanKinjunVal == 0 &&
         // (tenkanPriceCrossLow || kinjunPriceCrossLow) &&
         // kinjunPriceCrossLow &&
         // sameDirectionUTendaneVal > 0 &&
         // tekanDirectionVal == 1 &&
         checkAddTrade)
     {
-      addTrade(false);
       message = "VENTE";
+      Print(message);
+      addTrade(false);
     }
   }
 
   moveStopLost();
   // double TenkanVal= Ichimoku.TenkanSen(1);
-  datetime currentTime = TimeCurrent();
+  // datetime currentTime = TimeCurrent();
 
-  Comment("isTimeToTradeVal : ", isTimeToTradeVal, " : ", TimeToString(currentTime, TIME_DATE | TIME_MINUTES), "\n",
+  Comment("isTimeToTradeVal : ", isTimeToTradeVal, "\n",
           // "message : ", message, "\n",
           "PnL : ", valGetTotalProfitToday, "\n",
           "lostByTradeMax : ", lostByTradeMax, "\n",
           "objectifProfitByDay : ", objectifProfitByDay, "\n",
-          "objectifLostByDay : ", objectifLostByDay, "\n",
+          // "objectifLostByDay : ", objectifLostByDay, "\n",
           "sameDirectionUTendaneVal U0+U1+U2 : ", sameDirectionUTendaneVal, "\n",
           "uTimeTendanceCurrentVal : ", uTimeTendanceCurrentVal, "\n",
           "uTimeTendanceMidVal : ", uTimeTendanceMidVal, "\n",
           "uTimeTendanceLowVal : ", uTimeTendanceLowVal, "\n",
           "chikouIsFreexBuy : ", chikouIsFreexBuy, "\n",
           "chikouIsFreexSell : ", chikouIsFreexSell, "\n",
-          "sizeEssouflement : ", sizeEssouflement, "\n",
-          "iMomentumValx : ", iMomentumValx, "\n"
+          "sizeEssouflement : ", sizeEssouflement, "\n"
+          // "iMomentumValx : ", iMomentumValx, "\n"
           // "tekanCrossKinjunDirectionVal : ", tekanCrossKinjunDirectionVal, "\n",
           // "DESSOUS : ", priceLowCloud, "\n",
           // "TEKAN CROSS PRICE : ", tenkanPriceCross, "\n",
@@ -313,14 +321,16 @@ void OnTrade()
 //+-------------------------------------------------------------------------------------------+
 int manageRiskByEssouflement()
 {
-  int manageRiskByEssouflementVal = 0;
+  int manageRiskByEssouflementValx = 0;
   double currentPrice = iHigh(Symbol(), 0, 1);
-  double currentPriceValRes = MathAbs(manageRiskByEssouflementValMemory - currentPrice);
-  if (deltaManageRiskByEssouflement < currentPriceValRes && lotSizeRisk != riskLotMoyMini)
+  double manageRiskByEssouflementValMemoryVal = manageRiskByEssouflementValMemory;
+  double currentPriceValRes = MathAbs(manageRiskByEssouflementValMemoryVal - currentPrice);
+  if (deltaManageRiskByEssouflement < currentPriceValRes)
   {
     calculRisk(riskLostMini, profitMini, riskLotMini);
+    manageRiskByEssouflementValx = 1;
   }
-  return manageRiskByEssouflementVal;
+  return 0;
 }
 
 //+---------------------------------------------------------------------+
@@ -356,18 +366,18 @@ bool closeTradeByMomentumt()
   {
     // closeTrade(priceAboveCloud);
     // closeTradeByMomentumtVal = true;
-    Print("STRONG : ", myIMomentumVal);
+    //  Print("STRONG : ", myIMomentumVal);
   }
   if (myIMomentumVal > 99.99 && totalPositions > 0 && priceLowCloud)
   {
     // closeTrade(!priceLowCloud);
     // closeTradeByMomentumtVal = true;
-    Print("WEAK : ", myIMomentumVal);
+    //  Print("WEAK : ", myIMomentumVal);
   }
 
   if (myIMomentumVal > 99.9 && myIMomentumVal < 100.0)
   {
-    Print("NEUTRE MOMENTUM : ", myIMomentumVal);
+    // Print("NEUTRE MOMENTUM : ", myIMomentumVal);
   }
 
   return closeTradeByMomentumtVal;
@@ -439,7 +449,8 @@ int isAddTradeByCrossTekanKinjun(
     isAddTradeByCrossTekanKinjunVal = 0;
     // Print("NEUTRE :", isAddTradeByCrossTekanKinjunVal);
   }
-  return isAddTradeByCrossTekanKinjunVal;
+  // return isAddTradeByCrossTekanKinjunVal;
+  return 0;
 }
 
 //+------------------------------------------------------------------+
@@ -490,7 +501,8 @@ void Essouflement(
   if ((priceAboveCloudx != previousPriceAboveCloud || priceLowCloudx != previousPriceLowCloud) && !priceInCloud)
   {
     // sauvegarde du prix en high en memoire si changement de tendance
-    manageRiskByEssouflementValMemory = iHigh(Symbol(), 0, 1);
+    double manageRiskByEssouflementValMemoryVal = iHigh(Symbol(), 0, 0);
+    manageRiskByEssouflementValMemory = manageRiskByEssouflementValMemoryVal;
   }
 
   if (priceAboveCloudx != previousPriceAboveCloud || priceLowCloudx != previousPriceLowCloud || priceInCloud)
@@ -620,7 +632,7 @@ int sameDirectionUTendane(int currentUT, int midUT, int lowUT)
   }
   else
   {
-    calculRisk(riskLostHigh, profitMini, riskLotMini);
+    calculRisk(riskLostMini, profitMini, riskLotMini);
     sameDirectionUTendane = 0;
   }
   return sameDirectionUTendane;
@@ -709,11 +721,11 @@ void calculRisk(
     double lostTargetVal = -30,
     double closeToProfitVal = 0,
     double lotSizeRiskVal = 1,
-    int moveStopLostValParam = 30)
+    int moveStopLostValParam = 40)
 {
   double capital = AccountInfoDouble(ACCOUNT_BALANCE);
   objectifProfitByDay = 1000;       // (capital * percentProfit) * 4;
-  objectifLostByDay = -180;         // 3 * riskLostHigh; // (capital * percentRisk) * 4;
+  objectifLostByDay = -480;         // 3 * riskLostHigh; // (capital * percentRisk) * 4;
   lostTarget = lostTargetVal;       // capital * percentRisk;
   closeToProfit = closeToProfitVal; // capital * percentProfit;
   lotSizeRisk = lotSizeRiskVal;
@@ -1008,7 +1020,9 @@ double addStopLost()
   return KijunVal;
 }
 
-// Ajout d'un trade
+//+------------------------------------------------------------------+
+//| ajout du trade si true achat sinon false vente                   |
+//+------------------------------------------------------------------+
 void addTrade(bool isBuyOrSell = true)
 {
 
@@ -1074,8 +1088,7 @@ void addTrade(bool isBuyOrSell = true)
       // en cas d'erreur d'envoi de la demande, affiche le code d'erreur
       Print("Add TRADE OrderSend erreur %d", GetLastError());
     }
-
-    if (OrderSend(request, result))
+    else
     {
       sizeEssouflement--;
     }
@@ -1327,7 +1340,9 @@ bool isTimeToTrade()
   TimeToStruct(TimeCurrent(), rightNow);
 
   // Vérifier si le jour actuel n'est pas un samedi (6) ou un dimanche (0)
-  if (rightNow.hour >= hourStartTrade && rightNow.hour < hourEndTrade && rightNow.day_of_week != 6 && rightNow.day_of_week != 0)
+  if ((rightNow.hour >= hourStartTrade && rightNow.hour < hourEndTrade ||
+       rightNow.hour >= hourStartTradeBis && rightNow.hour < hourEndTradeBis) &&
+      rightNow.day_of_week != 6 && rightNow.day_of_week != 0)
   {
     isTimeTOTradeVal = true;
   }
