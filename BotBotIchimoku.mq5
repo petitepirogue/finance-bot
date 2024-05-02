@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2024, GenixCode"
 #property link "https://www.genixcode.com"
-#property version "1.10"
+#property version "1.11"
 
 #include <Trade\Trade.mqh>
 #include <Arrays\ArrayObj.mqh>
@@ -20,7 +20,7 @@ input double percentProfit = 0.1; // pourcentage profit sur capital
 input double percentRisk = -0.05; // pourcentage risque sur capital
 input int numberBot = 20230407;   // identifiant du robot à modifier si marche en double
 input int sessionTradeMax = 1;    // nombre de trade maximum pour un bot
-input int stopLostVal = 60;       // nombre de point sl
+input int stopLostVal = 100;      // nombre de point sl
 input int moveStopLostValx = 20;  // ajout de la marge du sl
 input int profitTarget = 20;      // breakevent sur profit maximal
 input double lotSize = 1;         // lot correspondant à 1 EUR par point pour DJ30, DAX, NAS100
@@ -30,7 +30,7 @@ input double uTime = 5;           // unité de temps en min : 1, 5 & 15
 input double riskLotMini = 1;    // lorsque la tandance est unique à U0
 input double riskLotMoyMini = 2; // lorsuqe le tendance est U0 identique à (U1 ou U2)
 input double riskLotMoy = 3;     // lorsuqe le tendance est U0 identique à (U1 ou U2)
-input double riskLotHigh = 4;    // lorsque la tendance identique : U0, U1, U2
+input double riskLotHigh = 5;    // lorsque la tendance identique : U0, U1, U2
 
 // gestion de perte pour fermeture du trade
 input double riskLostMini = -180;    // Perte maximal lorsque la tandance est unique à U0
@@ -283,7 +283,7 @@ void OnTick()
           "PnL : ", valGetTotalProfitToday, "\n",
           "lostByTradeMax : ", lostByTradeMax, "\n",
           "objectifProfitByDay : ", objectifProfitByDay, "\n",
-          // "objectifLostByDay : ", objectifLostByDay, "\n",
+          "objectifLostByDay : ", objectifLostByDay, "\n",
           "sameDirectionUTendaneVal U0+U1+U2 : ", sameDirectionUTendaneVal, "\n",
           "uTimeTendanceCurrentVal : ", uTimeTendanceCurrentVal, "\n",
           "uTimeTendanceMidVal : ", uTimeTendanceMidVal, "\n",
@@ -725,7 +725,7 @@ void calculRisk(
 {
   double capital = AccountInfoDouble(ACCOUNT_BALANCE);
   objectifProfitByDay = 1000;       // (capital * percentProfit) * 4;
-  objectifLostByDay = -480;         // 3 * riskLostHigh; // (capital * percentRisk) * 4;
+  objectifLostByDay = -280;         // 3 * riskLostHigh; // (capital * percentRisk) * 4;
   lostTarget = lostTargetVal;       // capital * percentRisk;
   closeToProfit = closeToProfitVal; // capital * percentProfit;
   lotSizeRisk = lotSizeRiskVal;
