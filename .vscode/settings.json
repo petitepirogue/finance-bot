@@ -5,6 +5,9 @@
     },
     "conventionalCommits.scopes": [
         "config",
-        "market"
+        "market",
+        "essouflement",
+        "addTrade",
+        "stoplost"
     ]
 }
